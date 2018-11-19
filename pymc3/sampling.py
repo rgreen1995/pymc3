@@ -14,7 +14,7 @@ from .backends.base import BaseTrace, MultiTrace
 from .backends.ndarray import NDArray
 from .distributions.distribution import draw_values
 from .model import modelcontext, Point, all_continuous
-from .step_methods import (NUTS, HamiltonianMC, Metropolis, BinaryMetropolis,
+from .step_methods import (NUTS, HamiltonianMC, Metropolis, Metropolis_Hack, BinaryMetropolis,
                            BinaryGibbsMetropolis, CategoricalGibbsMetropolis,
                            Slice, CompoundStep, arraystep, smc)
 from .util import update_start_vals, get_untransformed_name, is_transformed_name, get_default_varnames
@@ -31,7 +31,7 @@ __all__ = ['sample', 'iter_sample', 'sample_posterior_predictive',
            'sample_posterior_predictive_w', 'init_nuts',
            'sample_prior_predictive', 'sample_ppc', 'sample_ppc_w']
 
-STEP_METHODS = (NUTS, HamiltonianMC, Metropolis, BinaryMetropolis,
+STEP_METHODS = (NUTS, HamiltonianMC, Metropolis,Metropolis_Hack, BinaryMetropolis,
                 BinaryGibbsMetropolis, Slice, CategoricalGibbsMetropolis)
 
 
@@ -469,7 +469,6 @@ def sample(draws=500, step=None, init='auto', n_init=200000, start=None, trace=N
                 trace.report._run_convergence_checks(trace, model)
 
         trace.report._log_summary()
-
     return trace
 
 
@@ -629,9 +628,7 @@ def _iter_sample(draws, step, start=None, trace=None, chain=0, tune=None,
         step = CompoundStep(step)
     except TypeError:
         pass
-
     point = Point(start, model=model)
-
     if step.generates_stats and strace.supports_sampler_stats:
         strace.setup(draws, chain, step.stats_dtypes)
     else:
@@ -644,7 +641,7 @@ def _iter_sample(draws, step, start=None, trace=None, chain=0, tune=None,
                 step = stop_tuning(step)
             if step.generates_stats:
                 point, states = step.step(point)
-                if strace.supports_sampler_stats:
+		if strace.supports_sampler_stats:
                     strace.record(point, states)
                 else:
                     strace.record(point)

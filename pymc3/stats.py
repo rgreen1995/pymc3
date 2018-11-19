@@ -63,7 +63,6 @@ def statfunc(f):
 
     return wrapped_f
 
-
 @statfunc
 def autocorr(x, lag=None):
     """
