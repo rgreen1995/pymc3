@@ -14,7 +14,7 @@ from .backends.base import BaseTrace, MultiTrace
 from .backends.ndarray import NDArray
 from .distributions.distribution import draw_values
 from .model import modelcontext, Point, all_continuous
-from .step_methods import (NUTS, HamiltonianMC, Metropolis, Metropolis_Hack, BinaryMetropolis,
+from .step_methods import (NUTS, HamiltonianMC, Metropolis, PIP_Metropolis, BinaryMetropolis,
                            BinaryGibbsMetropolis, CategoricalGibbsMetropolis,
                            Slice, CompoundStep, arraystep, smc)
 from .util import update_start_vals, get_untransformed_name, is_transformed_name, get_default_varnames
@@ -31,7 +31,7 @@ __all__ = ['sample', 'iter_sample', 'sample_posterior_predictive',
            'sample_posterior_predictive_w', 'init_nuts',
            'sample_prior_predictive', 'sample_ppc', 'sample_ppc_w']
 
-STEP_METHODS = (NUTS, HamiltonianMC, Metropolis,Metropolis_Hack, BinaryMetropolis,
+STEP_METHODS = (NUTS, HamiltonianMC, Metropolis,PIP_Metropolis, BinaryMetropolis,
                 BinaryGibbsMetropolis, Slice, CategoricalGibbsMetropolis)
 
 

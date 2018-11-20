@@ -9,7 +9,7 @@ from .arraystep import ArrayStepShared, PopulationArrayStepShared, ArrayStep, me
 import pymc3 as pm
 from pymc3.theanof import floatX
 
-__all__ = ['Metropolis','Metropolis_Hack', 'DEMetropolis', 'BinaryMetropolis', 'BinaryGibbsMetropolis',
+__all__ = ['Metropolis','PIP_metropolis', 'DEMetropolis', 'BinaryMetropolis', 'BinaryGibbsMetropolis',
            'CategoricalGibbsMetropolis', 'NormalProposal', 'CauchyProposal',
            'LaplaceProposal', 'PoissonProposal', 'MultivariateNormalProposal']
 
@@ -173,10 +173,13 @@ class Metropolis(ArrayStepShared):
     def competence(var, has_grad):
         return Competence.COMPATIBLE
 
-class Metropolis_Hack(ArrayStepShared):
+class PIP_Metropolis(ArrayStepShared):
     """
-    Metropolis-Hastings sampling step
-
+    Prior Information Proposal Metropolis-Hastings sampling step
+    This sampler will require a distribution using a previous pdf which approximates
+    the distribution you are looking to sampler
+    Using this prior information the sampler will propose independent steps chosen 
+    randomly from a previous pdf 
     Parameters
     ----------
     vars : list
@@ -186,6 +189,12 @@ class Metropolis_Hack(ArrayStepShared):
     proposal_dist : function
         Function that returns zero-mean deviates when parameterized with
         S (and n). Defaults to normal.
+    proposal_density: function- probably best to use interpolation function ?
+	Function which evaluates the relative probabilities of proposing 
+	the current position to the proposed,
+	 Defaults to numerical estimate of pdf
+    prev_pdf: array 
+	 the previous pdf samples that will be used to generate new proposals
     scaling : scalar or array
         Initial scale factor for proposal. Defaults to 1.
     tune : bool
@@ -197,7 +206,7 @@ class Metropolis_Hack(ArrayStepShared):
     mode :  string or `Mode` instance.
         compilation mode passed to Theano functions
     """
-    name = 'metropolis_hack'
+    name = 'pip_metropolis'
 
     default_blocked = False
     generates_stats = True
@@ -206,7 +215,8 @@ class Metropolis_Hack(ArrayStepShared):
         'tune': np.bool,
     }]
 
-    def __init__(self, vars=None, S=None, proposal_dist=None, scaling=1.,
+    def __init__(self, vars=None, S=None, proposal_dist=None, 
+		 proposal_density = None, scaling=1.,
                  tune=True, tune_interval=100, model=None, mode=None, **kwargs):
 
         model = pm.modelcontext(model)
@@ -227,6 +237,11 @@ class Metropolis_Hack(ArrayStepShared):
         else:
             raise ValueError("Invalid rank for variance: %s" % S.ndim)
 
+	if proposal_density is not None: 
+	    self.proposal_density = proposal_density
+	else : 
+	    raise ValueError("You must provide a proposal density to ensure unbiased samples") 
+	
         self.scaling = np.atleast_1d(scaling).astype('d')
         self.tune = tune
         self.tune_interval = tune_interval
@@ -243,7 +258,7 @@ class Metropolis_Hack(ArrayStepShared):
 
         shared = pm.make_shared_replacements(vars, model)
         self.delta_logp = delta_logp(model.logpt, vars, shared)
-        super(Metropolis_Hack, self).__init__(vars, shared)
+        super(PIP_Metropolis, self).__init__(vars, shared)
 
     def astep(self, q0):
         if not self.steps_until_tune and self.tune:
@@ -267,12 +282,21 @@ class Metropolis_Hack(ArrayStepShared):
                 q = delta
         else:
             q = floatX(delta)
-        accept = self.delta_logp(q, q0)
-	q_new, accepted = metrop_select(accept, q, q0)
-        self.accepted += accepted
+	### ratio of posteriors between current and proposla
+        log_post_ratio = self.delta_logp(q, q0)
+	### add in the relative proposal densities to the acceptance ratio
+	### Not sure how is best to deal with points outside of interpolation range
+	### Maybe just take q0 to be the point as the prob outside range ~ 0 in this proposal ? 
 
-        self.steps_until_tune -= 1
-
+	try:
+	    log_prop_ratio = np.log(self.proposal_density(q0)) - np.log(self.proposal_density(q)) 
+	    accept = log_post_ratio + log_prop_ratio
+	    q_new, accepted = metrop_select(accept, q, q0)
+            self.accepted += accepted
+            self.steps_until_tune -= 1
+	except ValueError: 
+	    q_new = q0
+	    accept = False
         stats = {
             'tune': self.tune,
             'accept': np.exp(accept),
